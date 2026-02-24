@@ -111,6 +111,31 @@ const Customizer = () => {
     });
   }
 
+  const handleSaveDesign = async () => {
+    try {
+      const payload = {
+        name: 'Saved design',
+        description: 'Saved from XILLAFIT Studio',
+        prompt: snap.prompt || '',
+        color: state.color,
+        isLogoTexture: state.isLogoTexture,
+        isFullTexture: state.isFullTexture,
+        logoUrl: state.logoDecal || '',
+        textureUrl: state.fullDecal || '',
+        userId: null,
+      };
+
+      await fetch('http://localhost:8080/api/v1/designs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      // You could add a toast here later
+    } catch (error) {
+      console.error('Failed to save design', error);
+    }
+  };
+
   if (snap.intro) return null;
 
   return (
@@ -138,6 +163,13 @@ const Customizer = () => {
           >
             <img src={download} alt="Download" className="w-3 h-3" />
             <span>Download</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleSaveDesign}
+            className="hidden sm:inline-flex items-center gap-1 rounded-full border border-emerald-500/70 bg-emerald-500/20 px-3 py-1.5 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-500/30"
+          >
+            <span>Save design</span>
           </button>
           <CustomButton
             type="fixed"
