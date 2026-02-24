@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useRef } from 'react'
 import { easing } from 'maath';
 import { useSnapshot } from 'valtio';
 import { useFrame } from '@react-three/fiber';
@@ -6,28 +6,53 @@ import { Decal, useGLTF, useTexture } from '@react-three/drei';
 
 import state from '../store';
 
-const Shirt = () => {
+const Shirt = ({
+  colorOverride,
+  logoDecalOverride,
+  fullDecalOverride,
+  isLogoTextureOverride,
+  isFullTextureOverride,
+  logoSizeOverride,
+}) => {
   const snap = useSnapshot(state);
   const { nodes, materials } = useGLTF('/shirt_baked.glb');
+  const meshRef = useRef();
 
-  const logoTexture = useTexture(snap.logoDecal);
-  const fullTexture = useTexture(snap.fullDecal);
+  const appliedColor = colorOverride || snap.color;
+  const appliedLogoDecal = logoDecalOverride || snap.logoDecal || '/threejs.png';
+  const appliedFullDecal = fullDecalOverride || snap.fullDecal || '/threejs.png';
+  const appliedIsLogoTexture =
+    typeof isLogoTextureOverride === 'boolean' ? isLogoTextureOverride : snap.isLogoTexture;
+  const appliedIsFullTexture =
+    typeof isFullTextureOverride === 'boolean' ? isFullTextureOverride : snap.isFullTexture;
+  const appliedLogoSize = typeof logoSizeOverride === 'number' ? logoSizeOverride : snap.logoSize || 0.1;
 
-  useFrame((state, delta) => easing.dampC(materials.lambert1.color, snap.color, 0.25, delta));
+  const logoTexture = useTexture(appliedLogoDecal);
+  const fullTexture = useTexture(appliedFullDecal);
 
-  const stateString = JSON.stringify(snap);
+  useFrame((state, delta) => {
+    if (meshRef.current && meshRef.current.material) {
+      easing.dampC(meshRef.current.material.color, appliedColor, 0.25, delta);
+    }
+  });
+
+  if (!nodes?.T_Shirt_male) return null;
 
   return (
-    <group key={stateString}>
+    // Base shirt model with no positional offset so previews (like on the
+    // home page) stay nicely centered. Any pivot adjustments for the studio
+    // view are handled in StudioShirt instead.
+    <group>
       <mesh
+        ref={meshRef}
         castShadow
         geometry={nodes.T_Shirt_male.geometry}
-        material={materials.lambert1}
-        material-roughness={1}
-        dispose={null}
       >
-        {snap.isFullTexture && (
-          <Decal 
+        <meshStandardMaterial color={appliedColor} roughness={1} />
+
+        {/* Temporarily disabled full texture to test color changing */}
+        {false && appliedIsFullTexture && (
+          <Decal
             position={[0, 0, 0]}
             rotation={[0, 0, 0]}
             scale={1}
@@ -35,13 +60,17 @@ const Shirt = () => {
           />
         )}
 
-        {snap.isLogoTexture && (
-          <Decal 
-            position={[0, 0.04, 0.15]}
-            rotation={[0, 0, 0]}
-            scale={0.15}
+        {appliedIsLogoTexture && (
+          <Decal
+            position={[
+              (snap.logoOffsetX || 0),
+              0.04 + (snap.logoOffsetY || 0),
+              0.15,
+            ]}
+            rotation={[0, 0, ((snap.logoRotation || 0) * Math.PI) / 180]}
+            scale={appliedLogoSize}
             map={logoTexture}
-            map-anisotropy={16}
+            anisotropy={16}
             depthTest={false}
             depthWrite={true}
           />
