@@ -22,11 +22,11 @@ const Home = () => {
           <div className="flex items-center gap-3">
             <img
               src="./XillaLogo.png"
-              alt="XILLAFIT logo"
+              alt="Xillogo"
               className="w-24 h-24 object-contain"
             />
             <span className="font-semibold tracking-wide uppercase text-slate-100">
-              XILLAFIT
+              XillaFit
             </span>
           </div>
           <div className="flex items-center gap-8">
@@ -80,7 +80,7 @@ const Home = () => {
         <div className="home-content">
           <div className="flex-1 flex flex-col items-start gap-5 text-slate-100">
             <span className="text-[11px] tracking-[0.25em] uppercase text-sky-300">
-              Collection 01 • XILLAFIT Arctic Tees
+              Collection 01 • XillaFit Arctic Tees
             </span>
             <h1 className="head-text text-slate-50">
               Cold‑ready<br className="hidden lg:block" /> 3D shirt studio.
@@ -118,7 +118,7 @@ const Home = () => {
                 <MiniShirtPreview preset={PresetDesigns[1] || PresetDesigns[0]} />
               </div>
               <div className="absolute left-6 bottom-5 text-[11px] text-slate-100/80">
-                <p className="font-semibold">XILLAFIT Hero Tee</p>
+                <p className="font-semibold">XillaFit Hero Tee</p>
                 <p className="text-slate-200/70">Landing preview • Linked to presets</p>
                 <p className="mt-1 text-sky-100">$39.00</p>
               </div>
@@ -254,7 +254,7 @@ const Home = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="space-y-4 text-sm text-slate-300">
               <p>
-                XILLAFIT is built for creators who care about detail. We combine real‑world garment
+                XillaFit is built for creators who care about detail. We combine real‑world garment
                 shading with an intuitive 3D workspace so your shirts look printed before they ever leave
                 the screen.
               </p>
@@ -310,7 +310,7 @@ const Home = () => {
 
             <div className="w-full h-64 sm:h-72 lg:h-full rounded-2xl overflow-hidden border border-slate-700 bg-slate-900/60 shadow-xl">
               <iframe
-                title="XILLAFIT location on Google Maps"
+                title="XillaFit location on Google Maps"
                 src="https://www.google.com/maps?q=3620+MacArthur+Highway,+Abangan+Sur,+Marilao,+Bulacan&output=embed"
                 className="w-full h-full border-0"
                 loading="lazy"
@@ -325,14 +325,14 @@ const Home = () => {
         <footer className="mt-12 mb-6 border-t border-slate-800 pt-6 text-xs text-slate-400 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <span className="text-slate-100 font-semibold tracking-wide uppercase">
-              XILLAFIT
+              XillaFit
             </span>
             <span className="text-slate-500">• Custom sportswear & mockups</span>
           </div>
 
           <div className="flex flex-wrap items-center gap-4">
             <span className="text-slate-500">
-              © {new Date().getFullYear()} XILLAFIT. All rights reserved.
+              © {new Date().getFullYear()} XillaFit. All rights reserved.
             </span>
             <div className="flex flex-wrap gap-3">
               <a

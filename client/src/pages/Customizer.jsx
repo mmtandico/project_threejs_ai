@@ -115,7 +115,7 @@ const Customizer = () => {
     try {
       const payload = {
         name: 'Saved design',
-        description: 'Saved from XILLAFIT Studio',
+        description: 'Saved from XillaFit Studio',
         prompt: snap.prompt || '',
         color: state.color,
         isLogoTexture: state.isLogoTexture,
@@ -147,11 +147,11 @@ const Customizer = () => {
         <div className="flex items-center gap-3">
           <img
             src="./XillaLogo.png"
-            alt="XILLAFIT logo"
+            alt="Xillogo"
             className="w-8 h-8 object-contain"
           />
           <span className="text-[11px] font-semibold tracking-wide uppercase text-slate-100">
-            XILLAFIT Studio
+            XillaFit Studio
           </span>
         </div>
 
