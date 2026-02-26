@@ -37,14 +37,8 @@ const FilePicker = ({ file, setFile, readFile, uploadedImages = [], applyUploade
         <div className="flex flex-wrap gap-2">
           <CustomButton
             type="outline"
-            title="Use as logo"
+            title="Add as layer"
             handleClick={() => readFile('logo')}
-            customStyles="text-[10px]"
-          />
-          <CustomButton
-            type="filled"
-            title="Use as full"
-            handleClick={() => readFile('full')}
             customStyles="text-[10px]"
           />
         </div>
@@ -60,19 +54,22 @@ const FilePicker = ({ file, setFile, readFile, uploadedImages = [], applyUploade
             No uploads yet. Use the button above to add images you can reuse in designs.
           </p>
         ) : (
-          <div className="grid grid-cols-3 gap-2 max-h-40 overflow-y-auto custom-scrollbar">
+          <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto custom-scrollbar">
             {uploadedImages.map((img) => (
               <button
                 key={img.id}
                 type="button"
                 onClick={() => applyUploadedImage?.('logo', img.src)}
-                className="relative w-full aspect-square rounded-md overflow-hidden border border-gray-200 hover:border-sky-400"
+                className="relative w-full aspect-square rounded-md overflow-hidden border border-gray-200 hover:border-sky-400 bg-white/80 flex flex-col"
               >
                 <img
                   src={img.src}
-                  alt={img.name || 'Upload'}
-                  className="w-full h-full object-cover"
+                  alt="Image"
+                  className="w-full h-full object-cover flex-1"
                 />
+                <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] px-1 py-0.5 text-center">
+                  Image
+                </div>
               </button>
             ))}
           </div>

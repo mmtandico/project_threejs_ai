@@ -8,17 +8,22 @@ import CameraRig from './CameraRig';
 import StudioShirt from './StudioShirt';
 import AvatarModel from './AvatarModel';
 import maleAvatar1Url from './MaleAvatar1.fbx';
+import femaleAvatarUrl from './FemaleAvatar.fbx';
 import state from '../store';
 
 const CanvasModel = () => {
   const snap = useSnapshot(state);
 
+  // Choose which avatar model to show based on the current gender toggle.
+  const avatarModelPath =
+    snap.avatarGender === 'female' ? femaleAvatarUrl : maleAvatar1Url;
+
   // Use a different camera setup for avatar vs shirt.
-  // For avatar, aim the camera squarely at the belly/torso area so it stays centered.
-  // For avatar, pull the camera even farther back and slightly narrow the FOV
-  // so the whole body fits comfortably in view.
+  // Reset to a simple, stable avatar framing: full body, centered,
+  // at a fixed distance so size stays constant.
   const cameraConfig = snap.viewMode === 'avatar'
-    ? { position: [0, 6.0, 30], fov: 40 }
+    // Pull the camera further back so the avatar looks more zoomed out.
+    ? { position: [0, 25.0, 30], fov: 40 }
     : { position: [0, 0, 0], fov: 25 };
 
   return (
@@ -30,21 +35,42 @@ const CanvasModel = () => {
     >
       <ambientLight intensity={0.5} />
       <Environment preset="city" />
+
+      {/* Extra lighting so the avatar has depth and doesn't look flat */}
+      {snap.viewMode === 'avatar' && (
+        <>
+          {/* Key light from front‑left */}
+          <directionalLight
+            position={[6, 8, 6]}
+            intensity={1.2}
+            castShadow
+            shadow-mapSize-width={2048}
+            shadow-mapSize-height={2048}
+          />
+          {/* Soft fill from back‑right to lift the shadows */}
+          <directionalLight position={[-4, 6, -4]} intensity={0.5} />
+          {/* Gentle sky/ground light for subtle rim highlights */}
+          <hemisphereLight
+            skyColor="#ffffff"
+            groundColor="#555555"
+            intensity={0.5}
+          />
+        </>
+      )}
       <OrbitControls
         enablePan={false}
-        // Allow zoom in both modes; avatar has its own distance limits below.
-        enableZoom={true}
-        // For avatar: no minimum distance limit so you can zoom in as much as you like.
+        // Disable zoom for avatar so its size stays constant; allow zoom for shirt view.
+        enableZoom={snap.viewMode === 'avatar' ? false : true}
+        // For avatar: lock distance (matching the camera Z) so size stays constant.
         // For shirt: keep the original flexible range.
-        minDistance={snap.viewMode === 'avatar' ? 0 : 2}
-        maxDistance={snap.viewMode === 'avatar' ? 45 : 3}
-        // Aim the orbit pivot even higher above the avatar (around y ≈ 5.8),
-        // while shirt mode still targets the belly area of the shirt.
-        target={snap.viewMode === 'avatar' ? [0, 5.8, 0] : [0.15, -0.1, 0]}
+        minDistance={snap.viewMode === 'avatar' ? 30 : 2}
+        maxDistance={snap.viewMode === 'avatar' ? 30 : 3}
+        // Aim the orbit pivot slightly higher to keep the avatar in the middle.
+        target={snap.viewMode === 'avatar' ? [0, 5.5, 0] : [0.15, -0.1, 0]}
         enableDamping={true}
         dampingFactor={0.15}
         rotateSpeed={0.7}
-        // Extra smooth, easy scroll zoom in/out (shirt only, since avatar zoom is disabled)
+        // Extra smooth, easy scroll zoom in/out
         zoomSpeed={0.35}
         // Avatar: lock vertical angle so it only rotates horizontally 360°.
         // Shirt: keep previous limited vertical tilt.
@@ -56,11 +82,11 @@ const CanvasModel = () => {
         <Backdrop />
         <Suspense fallback={null}>
           {snap.viewMode === 'avatar' ? (
-            // Avatar view: lower the avatar/platform more
-            // so the whole body sits closer to the vertical center of the screen.
-            <group position={[0, -1.8, 0]}>
+            // Avatar view: small downward offset so the feet sit closer
+            // to the lower part of the frame.
+            <group position={[0, -0.8, 0]}>
               <AvatarModel
-                modelPath={maleAvatar1Url}
+                modelPath={avatarModelPath}
                 height={170}
                 weight={65}
                 skinColor="#ffddb3"

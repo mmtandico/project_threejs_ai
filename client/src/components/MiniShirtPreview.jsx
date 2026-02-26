@@ -24,7 +24,9 @@ const MiniShirtPreview = ({ preset }) => {
       <Environment preset="city" />
       <Center>
         <Suspense fallback={null}>
-          <Shirt {...overrides} />
+          {/* Disable global layer system so library/landing previews
+              don't change when editing the main studio shirt. */}
+          <Shirt disableLayers {...overrides} />
         </Suspense>
       </Center>
     </Canvas>

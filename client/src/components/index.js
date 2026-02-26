@@ -8,6 +8,7 @@ import PresetCollection from "./PresetCollection";
 import PresetCarousel from "./PresetCarousel";
 import ModelLibrary from "./ModelLibrary";
 import MiniShirtPreview from "./MiniShirtPreview";
+import LayersManager from "./LayersManager";
 
 export {
   CustomButton,
@@ -20,4 +21,5 @@ export {
   PresetCarousel,
   ModelLibrary,
   MiniShirtPreview,
+  LayersManager,
 };
