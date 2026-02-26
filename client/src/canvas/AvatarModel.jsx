@@ -9,6 +9,7 @@ function AvatarModel({
   weight = 65,
   skinColor = '#ffddb3',
   hairType = 'straight',
+  bodyType = 'athletic',
   onCenterChange,
 }) {
   const groupRef = useRef();
@@ -197,7 +198,7 @@ function AvatarModel({
     });
 
     // Apply customizations
-    customizeModel(clonedModel, height, weight, skinColor, hairType);
+    customizeModel(clonedModel, height, weight, skinColor, hairType, bodyType);
 
     groupRef.current.add(clonedModel);
 
@@ -267,7 +268,7 @@ function AvatarModel({
       trackingTarget,
       worldBox,
     });
-  }, [model, height, weight, skinColor, hairType]);
+  }, [model, height, weight, skinColor, hairType, bodyType]);
 
   if (!modelPath || !model) {
     return null; // Loading - Suspense will handle
@@ -277,11 +278,34 @@ function AvatarModel({
 }
 
 // Customize model materials
-function customizeModel(model, currentHeight, currentWeight, currentSkinColor, currentHairType) {
+function customizeModel(model, currentHeight, currentWeight, currentSkinColor, currentHairType, currentBodyType = 'athletic') {
   if (!model) return;
 
   const bmi = currentWeight / ((currentHeight / 100) ** 2);
-  const bodyScale = 1 + (bmi - 22) * 0.02;
+
+  // Adjust body scale based on body type
+  let bodyTypeMultiplier = 1.0;
+  switch (currentBodyType) {
+    case 'slim':
+      bodyTypeMultiplier = 0.95;
+      break;
+    case 'athletic':
+      bodyTypeMultiplier = 1.0;
+      break;
+    case 'average':
+      bodyTypeMultiplier = 1.05;
+      break;
+    case 'muscular':
+      bodyTypeMultiplier = 1.1;
+      break;
+    case 'curvy':
+      bodyTypeMultiplier = 1.08;
+      break;
+    default:
+      bodyTypeMultiplier = 1.0;
+  }
+
+  const bodyScale = (1 + (bmi - 22) * 0.02) * bodyTypeMultiplier;
 
   model.traverse((child) => {
     if (child.isMesh) {

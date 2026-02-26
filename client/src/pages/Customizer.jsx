@@ -5,7 +5,7 @@ import state from '../store';
 import { download, swatch, fileIcon, gear } from '../assets';
 import { downloadCanvasToImage, reader } from '../config/helpers';
 import { EditorTabs, FilterTabs, DecalTypes } from '../config/constants';
-import { ColorPicker, CustomButton, FilePicker, Tab, LogoSizePicker, ModelLibrary, LayersManager, MiniShirtPreview } from '../components';
+import { ColorPicker, CustomButton, FilePicker, Tab, LogoSizePicker, ModelLibrary, LayersManager, MiniShirtPreview, AvatarControl } from '../components';
 
 const Customizer = () => {
   const snap = useSnapshot(state);
@@ -22,6 +22,9 @@ const Customizer = () => {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [projectName, setProjectName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [layerImageFile, setLayerImageFile] = useState(null);
 
   // Auto-select first layer on mount
   useEffect(() => {
@@ -169,9 +172,57 @@ const Customizer = () => {
     return 'Extra Large';
   };
 
+  const capturePreview = () => {
+    try {
+      // Find the main canvas (the one showing the shirt in the center, not previews)
+      const canvases = document.querySelectorAll('canvas');
+      let mainCanvas = null;
+      let maxSize = 0;
+
+      canvases.forEach((canvas) => {
+        const rect = canvas.getBoundingClientRect();
+        const size = rect.width * rect.height;
+        // The main canvas is the largest one and should be in the center area
+        // Preview canvases are typically smaller (around 160px width)
+        if (size > maxSize && rect.width > 300) {
+          maxSize = size;
+          mainCanvas = canvas;
+        }
+      });
+
+      if (mainCanvas) {
+        // Wait a bit for the canvas to fully render all layers
+        return new Promise((resolve) => {
+          // Use requestAnimationFrame to ensure canvas is ready
+          requestAnimationFrame(() => {
+            setTimeout(() => {
+              try {
+                const dataURL = mainCanvas.toDataURL('image/png', 0.85);
+                resolve(dataURL);
+              } catch (error) {
+                console.warn('Failed to capture preview:', error);
+                resolve(null);
+              }
+            }, 300);
+          });
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to capture preview:', error);
+    }
+    return Promise.resolve(null);
+  };
+
   const handleSaveDesign = async (name) => {
+    setSaveError(null);
+    setSaveSuccess(false);
+
     try {
       const sizeLabel = computeSizeLabel();
+
+      // Capture preview image
+      const previewImage = await capturePreview();
+
       const payload = {
         name: name || 'Saved design',
         description: 'Saved from XillaFit Studio',
@@ -185,18 +236,35 @@ const Customizer = () => {
         shirtDetails: state.shirtDetails || {},
         // Persist full layer stack so saved designs can be re‑edited later.
         layers: state.layers || [],
+        previewImage: previewImage || null, // Store the preview image
         userId: null,
       };
 
-      await fetch('http://localhost:8080/api/v1/designs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      let savedDesign = null;
+
+      // Try to save to backend, but don't fail if backend is unavailable
+      try {
+        const response = await fetch('http://localhost:8080/api/v1/designs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (response.ok) {
+          savedDesign = await response.json().catch(() => null);
+        } else {
+          // Backend returned an error, but we'll still save locally
+          const errorData = await response.json().catch(() => ({}));
+          console.warn('Backend save failed:', errorData.message || `Status: ${response.status}`);
+        }
+      } catch (networkError) {
+        // Network error (server not running, CORS, etc.) - still save locally
+        console.warn('Backend unavailable, saving locally only:', networkError.message);
+      }
 
       // Also store a local copy so it appears immediately in Library → "My".
       const localDesign = {
-        id: Date.now().toString(),
+        id: savedDesign?._id || Date.now().toString(),
         name: payload.name,
         color: payload.color,
         logoUrl: payload.logoUrl,
@@ -206,13 +274,38 @@ const Customizer = () => {
         layers: payload.layers,
         shirtDetails: payload.shirtDetails,
         sizeLabel: payload.sizeLabel,
+        previewImage: payload.previewImage, // Include preview image
       };
-      state.localDesigns = [localDesign, ...(state.localDesigns || [])];
+
+      // Add to local designs if not already present
+      const existingIndex = (state.localDesigns || []).findIndex(d => d.id === localDesign.id);
+      if (existingIndex >= 0) {
+        // Update existing
+        state.localDesigns[existingIndex] = localDesign;
+      } else {
+        // Add new
+        state.localDesigns = [localDesign, ...(state.localDesigns || [])];
+      }
 
       // Notify the app that designs have changed so the "My" tab can refresh.
       state.designsVersion = (state.designsVersion || 0) + 1;
+
+      setSaveSuccess(true);
+      setIsSaving(false);
+
+      // Close modal after a short delay to show success message
+      setTimeout(() => {
+        setShowSaveModal(false);
+        setProjectName('');
+        setSaveSuccess(false);
+        setSaveError(null);
+      }, 1500);
+
+      return true;
     } catch (error) {
       console.error('Failed to save design', error);
+      setSaveError(error.message || 'Failed to save design. Please try again.');
+      return false;
     }
   };
 
@@ -294,16 +387,20 @@ const Customizer = () => {
             <img src={download} alt="Download" className="w-3 h-3" />
             <span>Download</span>
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setProjectName('');
-              setShowSaveModal(true);
-            }}
-            className="hidden sm:inline-flex items-center gap-1 rounded-full border border-emerald-500/70 bg-emerald-500/20 px-3 py-1.5 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-500/30"
-          >
-            <span>Save design</span>
-          </button>
+          {snap.viewMode === 'shirt' && (
+            <button
+              type="button"
+              onClick={() => {
+                setProjectName('');
+                setSaveError(null);
+                setSaveSuccess(false);
+                setShowSaveModal(true);
+              }}
+              className="hidden sm:inline-flex items-center gap-1 rounded-full border border-emerald-500/70 bg-emerald-500/20 px-3 py-1.5 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-500/30"
+            >
+              <span>Save design</span>
+            </button>
+          )}
           <CustomButton
             type="fixed"
             title="Back to home"
@@ -390,23 +487,30 @@ const Customizer = () => {
         {/* Controls panel */}
         <aside className="w-[260px] max-w-xs shrink-0 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl p-3 sm:p-4 flex flex-col gap-3 pointer-events-auto max-h-[80vh] overflow-y-auto custom-scrollbar">
           <h2 className="text-sm font-semibold text-slate-100 tracking-wide uppercase">
-            Design controls
+            {snap.viewMode === 'avatar' ? 'Avatar controls' : 'Design controls'}
           </h2>
 
-          {/* Active editor content (only show when a tool is selected) */}
-          {activeEditorTab && (
-            <div className="mt-3">
-              {generateTabContent()}
-            </div>
+          {/* Show Avatar Control when in avatar mode */}
+          {snap.viewMode === 'avatar' ? (
+            <AvatarControl />
+          ) : (
+            <>
+              {/* Active editor content (only show when a tool is selected) */}
+              {activeEditorTab && (
+                <div className="mt-3">
+                  {generateTabContent()}
+                </div>
+              )}
+
+              {/* Layers panel – draggable multi-layer system */}
+              <div className="mt-1 border-t border-slate-800 pt-2">
+                <LayersManager onSelectLayer={setSelectedLayer} />
+              </div>
+            </>
           )}
 
-          {/* Layers panel – draggable multi-layer system */}
-          <div className="mt-1 border-t border-slate-800 pt-2">
-            <LayersManager onSelectLayer={setSelectedLayer} />
-          </div>
-
-          {/* Layer properties - show when a layer is selected */}
-          {selectedLayer && snap.layers.find((l) => l.id === selectedLayer.id) && (
+          {/* Layer properties - show when a layer is selected (only in shirt mode) */}
+          {snap.viewMode !== 'avatar' && selectedLayer && snap.layers.find((l) => l.id === selectedLayer.id) && (
             <div className="mt-2 border-t border-slate-800 pt-2 space-y-2">
               <p className="text-[11px] font-semibold tracking-wide uppercase text-slate-300">
                 Layer: {selectedLayer.name}
@@ -418,6 +522,166 @@ const Customizer = () => {
 
                 return (
                   <>
+                    {/* Layer Type Selection */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px] text-slate-300">
+                        <span>Layer Type</span>
+                      </div>
+                      <select
+                        value={liveLayer.type || 'logo'}
+                        onChange={(e) => {
+                          const layer = state.layers.find((l) => l.id === selectedLayer.id);
+                          if (layer) {
+                            const newType = e.target.value;
+                            layer.type = newType;
+                            // If switching to text, initialize text properties
+                            if (newType === 'text' && !layer.text) {
+                              layer.text = '';
+                              layer.textColor = '#ffffff';
+                            }
+                            // If switching to logo/image, ensure image property exists
+                            if (newType === 'logo' && !layer.image) {
+                              layer.image = '';
+                            }
+                            // If switching to shape, initialize shape properties
+                            if (newType === 'shape') {
+                              layer.shapeType = layer.shapeType || 'circle';
+                              layer.shapeColor = layer.shapeColor || '#ff0000';
+                              layer.shapeBorderColor = layer.shapeBorderColor || 'transparent';
+                              layer.shapeBorderWidth = layer.shapeBorderWidth || 0;
+                            }
+                            setSelectedLayer({ ...layer });
+                          }
+                        }}
+                        className="w-full rounded-md border border-slate-700 bg-slate-900/60 px-2 py-1 text-[11px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                      >
+                        <option value="logo">Image / Logo</option>
+                        <option value="text">Text</option>
+                        <option value="shape">Shape</option>
+                      </select>
+                    </div>
+
+                    {/* Image Upload for Logo/Image Layers */}
+                    {(liveLayer.type === 'logo' || liveLayer.type === 'full') && (
+                      <div className="space-y-2">
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[11px] text-slate-300">
+                            <span>Image</span>
+                          </div>
+
+                          {/* Current image preview */}
+                          {liveLayer.image && (
+                            <div className="w-full h-24 rounded-md border border-slate-700 bg-slate-900/60 overflow-hidden mb-2">
+                              <img
+                                src={liveLayer.image}
+                                alt="Layer preview"
+                                className="w-full h-full object-contain"
+                              />
+                            </div>
+                          )}
+
+                          {/* Upload button */}
+                          <div>
+                            <input
+                              id="layer-image-upload"
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={async (e) => {
+                                const file = e.target.files[0];
+                                if (!file) return;
+
+                                setLayerImageFile(file);
+
+                                try {
+                                  const result = await reader(file);
+                                  const layer = state.layers.find((l) => l.id === selectedLayer.id);
+                                  if (layer) {
+                                    layer.image = result;
+                                    layer.type = 'logo'; // Ensure type is logo for image layers
+                                    setSelectedLayer({ ...layer });
+                                  }
+
+                                  // Remember this upload so it can be reused later
+                                  const imageEntry = {
+                                    id: Date.now(),
+                                    src: result,
+                                    name: file.name || 'Image',
+                                  };
+                                  state.uploadedImages = [imageEntry, ...(state.uploadedImages || [])];
+                                } catch (error) {
+                                  console.error('Failed to read image file:', error);
+                                }
+
+                                // Reset input
+                                e.target.value = '';
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const input = document.getElementById('layer-image-upload');
+                                if (input) input.click();
+                              }}
+                              className="w-full px-3 py-2 rounded-md border border-slate-700 bg-slate-800/60 text-[11px] text-slate-200 hover:bg-slate-700/60 transition-colors flex items-center justify-center gap-2"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                              {liveLayer.image ? 'Change Image' : 'Upload Image'}
+                            </button>
+                          </div>
+
+                          {/* Remove image button */}
+                          {liveLayer.image && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const layer = state.layers.find((l) => l.id === selectedLayer.id);
+                                if (layer) {
+                                  layer.image = '';
+                                  setSelectedLayer({ ...layer });
+                                }
+                              }}
+                              className="w-full px-3 py-1.5 rounded-md border border-red-500/50 bg-red-500/10 text-[11px] text-red-300 hover:bg-red-500/20 transition-colors"
+                            >
+                              Remove Image
+                            </button>
+                          )}
+
+                          {/* Use uploaded images */}
+                          {snap.uploadedImages && snap.uploadedImages.length > 0 && (
+                            <div className="space-y-1">
+                              <div className="text-[10px] text-slate-400">Or use previously uploaded:</div>
+                              <div className="grid grid-cols-3 gap-2 max-h-32 overflow-y-auto custom-scrollbar">
+                                {snap.uploadedImages.map((uploaded) => (
+                                  <button
+                                    key={uploaded.id}
+                                    type="button"
+                                    onClick={() => {
+                                      const layer = state.layers.find((l) => l.id === selectedLayer.id);
+                                      if (layer) {
+                                        layer.image = uploaded.src;
+                                        layer.type = 'logo';
+                                        setSelectedLayer({ ...layer });
+                                      }
+                                    }}
+                                    className="aspect-square rounded border border-slate-700 bg-slate-900/60 overflow-hidden hover:border-sky-400 transition-colors"
+                                  >
+                                    <img
+                                      src={uploaded.src}
+                                      alt={uploaded.name}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Text content & style for text layers */}
                     {liveLayer.type === 'text' && (
                       <div className="space-y-2">
@@ -571,6 +835,245 @@ const Customizer = () => {
                       </div>
                     )}
 
+                    {/* Shape controls for shape layers */}
+                    {liveLayer.type === 'shape' && (
+                      <div className="space-y-2">
+                        {/* Shape Type */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[11px] text-slate-300">
+                            <span>Shape Type</span>
+                          </div>
+                          <select
+                            value={liveLayer.shapeType || 'circle'}
+                            onChange={(e) => {
+                              const layer = state.layers.find((l) => l.id === selectedLayer.id);
+                              if (layer) {
+                                layer.shapeType = e.target.value;
+                                setSelectedLayer({ ...layer });
+                              }
+                            }}
+                            className="w-full rounded-md border border-slate-700 bg-slate-900/60 px-2 py-1.5 text-[11px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                          >
+                            <option value="circle">Circle</option>
+                            <option value="square">Square</option>
+                            <option value="triangle">Triangle</option>
+                            <option value="star">Star</option>
+                            <option value="heart">Heart</option>
+                            <option value="diamond">Diamond</option>
+                            <option value="hexagon">Hexagon</option>
+                          </select>
+                        </div>
+
+                        {/* Shape Color */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[11px] text-slate-300">
+                            <span>Shape Color</span>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="inline-flex w-4 h-4 rounded-full border border-slate-600"
+                                style={{ backgroundColor: liveLayer.shapeColor || '#ff0000' }}
+                              />
+                            </div>
+                          </div>
+                          <input
+                            type="color"
+                            value={liveLayer.shapeColor || '#ff0000'}
+                            onChange={(e) => {
+                              const layer = state.layers.find((l) => l.id === selectedLayer.id);
+                              if (layer) {
+                                layer.shapeColor = e.target.value;
+                                setSelectedLayer({ ...layer });
+                              }
+                            }}
+                            className="w-full h-8 bg-transparent border border-slate-600 rounded cursor-pointer"
+                          />
+                        </div>
+
+                        {/* Border Color */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[11px] text-slate-300">
+                            <span>Border Color</span>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="inline-flex w-4 h-4 rounded-full border border-slate-600"
+                                style={{ backgroundColor: liveLayer.shapeBorderColor || 'transparent' }}
+                              />
+                            </div>
+                          </div>
+                          <input
+                            type="color"
+                            value={liveLayer.shapeBorderColor === 'transparent' ? '#000000' : (liveLayer.shapeBorderColor || '#000000')}
+                            onChange={(e) => {
+                              const layer = state.layers.find((l) => l.id === selectedLayer.id);
+                              if (layer) {
+                                layer.shapeBorderColor = e.target.value;
+                                setSelectedLayer({ ...layer });
+                              }
+                            }}
+                            className="w-full h-8 bg-transparent border border-slate-600 rounded cursor-pointer"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const layer = state.layers.find((l) => l.id === selectedLayer.id);
+                              if (layer) {
+                                layer.shapeBorderColor = 'transparent';
+                                setSelectedLayer({ ...layer });
+                              }
+                            }}
+                            className="w-full px-2 py-1 rounded-md border border-slate-700 bg-slate-800/60 text-[10px] text-slate-300 hover:bg-slate-700/60"
+                          >
+                            Remove Border
+                          </button>
+                        </div>
+
+                        {/* Border Width */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[11px] text-slate-300">
+                            <span>Border Width</span>
+                            <span className="font-mono text-slate-200">
+                              {liveLayer.shapeBorderWidth || 0}px
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="20"
+                            step="1"
+                            value={liveLayer.shapeBorderWidth || 0}
+                            onChange={(e) => {
+                              const layer = state.layers.find((l) => l.id === selectedLayer.id);
+                              if (layer) {
+                                layer.shapeBorderWidth = parseInt(e.target.value);
+                                setSelectedLayer({ ...layer });
+                              }
+                            }}
+                            className="w-full accent-sky-400"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Shape controls for shape layers */}
+                    {liveLayer.type === 'shape' && (
+                      <div className="space-y-2">
+                        {/* Shape Type */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[11px] text-slate-300">
+                            <span>Shape Type</span>
+                          </div>
+                          <select
+                            value={liveLayer.shapeType || 'circle'}
+                            onChange={(e) => {
+                              const layer = state.layers.find((l) => l.id === selectedLayer.id);
+                              if (layer) {
+                                layer.shapeType = e.target.value;
+                                setSelectedLayer({ ...layer });
+                              }
+                            }}
+                            className="w-full rounded-md border border-slate-700 bg-slate-900/60 px-2 py-1.5 text-[11px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                          >
+                            <option value="circle">Circle</option>
+                            <option value="square">Square</option>
+                            <option value="triangle">Triangle</option>
+                            <option value="star">Star</option>
+                            <option value="heart">Heart</option>
+                            <option value="diamond">Diamond</option>
+                            <option value="hexagon">Hexagon</option>
+                          </select>
+                        </div>
+
+                        {/* Shape Color */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[11px] text-slate-300">
+                            <span>Shape Color</span>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="inline-flex w-4 h-4 rounded-full border border-slate-600"
+                                style={{ backgroundColor: liveLayer.shapeColor || '#ff0000' }}
+                              />
+                            </div>
+                          </div>
+                          <input
+                            type="color"
+                            value={liveLayer.shapeColor || '#ff0000'}
+                            onChange={(e) => {
+                              const layer = state.layers.find((l) => l.id === selectedLayer.id);
+                              if (layer) {
+                                layer.shapeColor = e.target.value;
+                                setSelectedLayer({ ...layer });
+                              }
+                            }}
+                            className="w-full h-8 bg-transparent border border-slate-600 rounded cursor-pointer"
+                          />
+                        </div>
+
+                        {/* Border Color */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[11px] text-slate-300">
+                            <span>Border Color</span>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="inline-flex w-4 h-4 rounded-full border border-slate-600"
+                                style={{ backgroundColor: liveLayer.shapeBorderColor === 'transparent' ? 'transparent' : (liveLayer.shapeBorderColor || '#000000') }}
+                              />
+                            </div>
+                          </div>
+                          <input
+                            type="color"
+                            value={liveLayer.shapeBorderColor === 'transparent' ? '#000000' : (liveLayer.shapeBorderColor || '#000000')}
+                            onChange={(e) => {
+                              const layer = state.layers.find((l) => l.id === selectedLayer.id);
+                              if (layer) {
+                                layer.shapeBorderColor = e.target.value;
+                                setSelectedLayer({ ...layer });
+                              }
+                            }}
+                            className="w-full h-8 bg-transparent border border-slate-600 rounded cursor-pointer"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const layer = state.layers.find((l) => l.id === selectedLayer.id);
+                              if (layer) {
+                                layer.shapeBorderColor = 'transparent';
+                                layer.shapeBorderWidth = 0;
+                                setSelectedLayer({ ...layer });
+                              }
+                            }}
+                            className="w-full px-2 py-1 rounded-md border border-slate-700 bg-slate-800/60 text-[10px] text-slate-300 hover:bg-slate-700/60"
+                          >
+                            Remove Border
+                          </button>
+                        </div>
+
+                        {/* Border Width */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[11px] text-slate-300">
+                            <span>Border Width</span>
+                            <span className="font-mono text-slate-200">
+                              {liveLayer.shapeBorderWidth || 0}px
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="20"
+                            step="1"
+                            value={liveLayer.shapeBorderWidth || 0}
+                            onChange={(e) => {
+                              const layer = state.layers.find((l) => l.id === selectedLayer.id);
+                              if (layer) {
+                                layer.shapeBorderWidth = parseInt(e.target.value);
+                                setSelectedLayer({ ...layer });
+                              }
+                            }}
+                            className="w-full accent-sky-400"
+                          />
+                        </div>
+                      </div>
+                    )}
+
                     {/* Layer size */}
                     <div className="space-y-1">
                       <div className="flex items-center justify-between text-[11px] text-slate-300">
@@ -607,8 +1110,8 @@ const Customizer = () => {
                           <span className="w-4 text-slate-400">X</span>
                           <input
                             type="range"
-                            min="-0.2"
-                            max="0.2"
+                            min="-0.5"
+                            max="0.5"
                             step="0.005"
                             value={liveLayer.offsetX ?? 0}
                             onChange={(e) => {
@@ -628,8 +1131,8 @@ const Customizer = () => {
                           <span className="w-4 text-slate-400">Y</span>
                           <input
                             type="range"
-                            min="-0.15"
-                            max="0.15"
+                            min="-0.6"
+                            max="0.6"
                             step="0.005"
                             value={liveLayer.offsetY ?? 0}
                             onChange={(e) => {
@@ -668,13 +1171,37 @@ const Customizer = () => {
                         </div>
                       </div>
                     </div>
+
+                    {/* Placement area (front / back / shoulders) */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px] text-slate-300">
+                        <span>Placement area</span>
+                      </div>
+                      <select
+                        value={liveLayer.placement || 'front'}
+                        onChange={(e) => {
+                          const layer = state.layers.find((l) => l.id === selectedLayer.id);
+                          if (layer) {
+                            layer.placement = e.target.value;
+                            setSelectedLayer({ ...layer });
+                          }
+                        }}
+                        className="w-full rounded-md border border-slate-700 bg-slate-900/60 px-2 py-1 text-[11px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                      >
+                        <option value="front">Front</option>
+                        <option value="back">Back</option>
+                        <option value="leftShoulder">Left shoulder</option>
+                        <option value="rightShoulder">Right shoulder</option>
+                      </select>
+                    </div>
                   </>
                 );
               })()}
             </div>
           )}
 
-          {/* Properties panel */}
+          {/* Properties panel - only show in shirt mode */}
+          {snap.viewMode !== 'avatar' && (
           <div className="mt-2 border-t border-slate-800 pt-2 space-y-3">
             <p className="text-[11px] font-semibold tracking-wide uppercase text-slate-300">
               Properties
@@ -797,6 +1324,7 @@ const Customizer = () => {
               })}
             </div>
           </div>
+          )}
         </aside>
       </div>
 
@@ -810,17 +1338,49 @@ const Customizer = () => {
                   Save design to library
                 </h2>
                 <p className="text-[11px] text-slate-400">
-                  Confirm the details below. This design will appear in the <span className="font-semibold">“My”</span> section of the library.
+                  Confirm the details below. This design will appear in the <span className="font-semibold">"My"</span> section of the library.
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => !isSaving && setShowSaveModal(false)}
+                onClick={() => {
+                  if (!isSaving) {
+                    setShowSaveModal(false);
+                    setProjectName('');
+                    setSaveError(null);
+                    setSaveSuccess(false);
+                  }
+                }}
                 className="text-slate-400 hover:text-slate-100 text-sm px-2"
               >
                 ×
               </button>
             </div>
+
+            {/* Success message */}
+            {saveSuccess && (
+              <div className="bg-emerald-500/20 border border-emerald-500/50 rounded-lg p-3 flex items-center gap-2">
+                <svg className="w-4 h-4 text-emerald-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <p className="text-[11px] text-emerald-200 font-medium">
+                  Design saved successfully! It will appear in the "My" library.
+                </p>
+              </div>
+            )}
+
+            {/* Error message */}
+            {saveError && (
+              <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 flex items-start gap-2">
+                <svg className="w-4 h-4 text-red-300 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div className="flex-1">
+                  <p className="text-[11px] text-red-200 font-medium mb-1">Failed to save design</p>
+                  <p className="text-[10px] text-red-300/80">{saveError}</p>
+                </div>
+              </div>
+            )}
 
             {/* Project name */}
             <div className="space-y-1">
@@ -852,6 +1412,8 @@ const Customizer = () => {
                       fullDecal: state.fullDecal,
                       isLogoTexture: state.isLogoTexture,
                       isFullTexture: state.isFullTexture,
+                      layers: state.layers || [],
+                      shirtDetails: state.shirtDetails || {},
                     }}
                   />
                 </div>
@@ -916,7 +1478,14 @@ const Customizer = () => {
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => !isSaving && setShowSaveModal(false)}
+                onClick={() => {
+                  if (!isSaving) {
+                    setShowSaveModal(false);
+                    setProjectName('');
+                    setSaveError(null);
+                    setSaveSuccess(false);
+                  }
+                }}
                 className="px-3 py-1.5 rounded-full border border-slate-600 text-[11px] text-slate-200 hover:bg-slate-800"
                 disabled={isSaving}
               >
@@ -927,17 +1496,22 @@ const Customizer = () => {
                 onClick={async () => {
                   if (isSaving) return;
                   setIsSaving(true);
-                  try {
-                    await handleSaveDesign(projectName || 'Saved design');
-                    setShowSaveModal(false);
-                  } finally {
+                  setSaveError(null);
+                  setSaveSuccess(false);
+
+                  const success = await handleSaveDesign(projectName || 'Saved design');
+
+                  // Don't close modal here - let handleSaveDesign handle it after success delay
+                  // If save failed, handleSaveDesign will have set the error state
+                  if (!success) {
                     setIsSaving(false);
                   }
+                  // If success, handleSaveDesign will close the modal after a delay
                 }}
                 className="px-4 py-1.5 rounded-full border border-emerald-500 bg-emerald-500/20 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-60 disabled:cursor-not-allowed"
-                disabled={isSaving}
+                disabled={isSaving || saveSuccess}
               >
-                {isSaving ? 'Saving…' : 'Confirm & save'}
+                {isSaving ? 'Saving…' : saveSuccess ? 'Saved!' : 'Confirm & save'}
               </button>
             </div>
           </div>

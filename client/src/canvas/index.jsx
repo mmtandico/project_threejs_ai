@@ -87,10 +87,11 @@ const CanvasModel = () => {
             <group position={[0, -0.8, 0]}>
               <AvatarModel
                 modelPath={avatarModelPath}
-                height={170}
-                weight={65}
-                skinColor="#ffddb3"
-                hairType="straight"
+                height={snap.avatarHeight || 170}
+                weight={snap.avatarWeight || 65}
+                skinColor={snap.avatarSkinColor || '#ffddb3'}
+                hairType={snap.avatarHairType || 'straight'}
+                bodyType={snap.avatarBodyType || 'athletic'}
               />
             </group>
           ) : (

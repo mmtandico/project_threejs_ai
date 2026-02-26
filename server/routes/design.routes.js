@@ -27,6 +27,10 @@ router.post('/', async (req, res) => {
       isFullTexture,
       logoUrl,
       textureUrl,
+      sizeLabel,
+      shirtDetails,
+      layers,
+      previewImage,
       userId,
     } = req.body;
 
@@ -39,13 +43,20 @@ router.post('/', async (req, res) => {
       isFullTexture,
       logoUrl,
       textureUrl,
+      sizeLabel,
+      shirtDetails,
+      layers,
+      previewImage,
       userId,
     });
 
     res.status(201).json(design);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Failed to save design' });
+    console.error('Error saving design:', error);
+    res.status(500).json({
+      message: 'Failed to save design',
+      error: error.message
+    });
   }
 });
 

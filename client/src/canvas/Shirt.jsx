@@ -10,8 +10,9 @@ import state from '../store';
 // Component to render a single layer
 const LayerDecal = ({ layer }) => {
   const isTextLayer = layer.type === 'text';
+  const isShapeLayer = layer.type === 'shape';
 
-  // Base texture for image-based layers (logo/full). For text we will instead
+  // Base texture for image-based layers (logo/full). For text and shapes we will instead
   // generate a CanvasTexture below.
   const texture = useTexture(layer.image || '/XillaLogo.png');
 
@@ -81,6 +82,182 @@ const LayerDecal = ({ layer }) => {
     layer.outlineEnabled,
   ]);
 
+  // Generate a shape texture for shape layers
+  const shapeTexture = useMemo(() => {
+    if (!isShapeLayer || !layer.shapeType) return null;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = 1024;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'rgba(0,0,0,0)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const size = Math.min(canvas.width, canvas.height) * 0.4;
+
+    ctx.fillStyle = layer.shapeColor || '#ff0000';
+    ctx.strokeStyle = layer.shapeBorderColor || 'transparent';
+    ctx.lineWidth = layer.shapeBorderWidth || 0;
+
+    // Draw different shapes based on shapeType
+    switch (layer.shapeType) {
+      case 'circle':
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, size / 2, 0, Math.PI * 2);
+        if (layer.shapeBorderWidth > 0) ctx.stroke();
+        ctx.fill();
+        break;
+
+      case 'square':
+        const squareSize = size * 0.7;
+        ctx.fillRect(centerX - squareSize / 2, centerY - squareSize / 2, squareSize, squareSize);
+        if (layer.shapeBorderWidth > 0) {
+          ctx.strokeRect(centerX - squareSize / 2, centerY - squareSize / 2, squareSize, squareSize);
+        }
+        break;
+
+      case 'triangle':
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY - size / 2);
+        ctx.lineTo(centerX - size / 2, centerY + size / 2);
+        ctx.lineTo(centerX + size / 2, centerY + size / 2);
+        ctx.closePath();
+        if (layer.shapeBorderWidth > 0) ctx.stroke();
+        ctx.fill();
+        break;
+
+      case 'star':
+        ctx.beginPath();
+        const spikes = 5;
+        const outerRadius = size / 2;
+        const innerRadius = outerRadius * 0.4;
+        for (let i = 0; i < spikes * 2; i++) {
+          const radius = i % 2 === 0 ? outerRadius : innerRadius;
+          const angle = (i * Math.PI) / spikes - Math.PI / 2;
+          const x = centerX + radius * Math.cos(angle);
+          const y = centerY + radius * Math.sin(angle);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        if (layer.shapeBorderWidth > 0) ctx.stroke();
+        ctx.fill();
+        break;
+
+      case 'heart':
+        ctx.beginPath();
+        const heartSize = size * 0.6;
+        ctx.moveTo(centerX, centerY + heartSize * 0.3);
+        ctx.bezierCurveTo(
+          centerX, centerY,
+          centerX - heartSize * 0.5, centerY,
+          centerX - heartSize * 0.5, centerY + heartSize * 0.2
+        );
+        ctx.bezierCurveTo(
+          centerX - heartSize * 0.5, centerY + heartSize * 0.5,
+          centerX, centerY + heartSize * 0.7,
+          centerX, centerY + heartSize
+        );
+        ctx.bezierCurveTo(
+          centerX, centerY + heartSize * 0.7,
+          centerX + heartSize * 0.5, centerY + heartSize * 0.5,
+          centerX + heartSize * 0.5, centerY + heartSize * 0.2
+        );
+        ctx.bezierCurveTo(
+          centerX + heartSize * 0.5, centerY,
+          centerX, centerY,
+          centerX, centerY + heartSize * 0.3
+        );
+        ctx.closePath();
+        if (layer.shapeBorderWidth > 0) ctx.stroke();
+        ctx.fill();
+        break;
+
+      case 'diamond':
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY - size / 2);
+        ctx.lineTo(centerX + size / 2, centerY);
+        ctx.lineTo(centerX, centerY + size / 2);
+        ctx.lineTo(centerX - size / 2, centerY);
+        ctx.closePath();
+        if (layer.shapeBorderWidth > 0) ctx.stroke();
+        ctx.fill();
+        break;
+
+      case 'hexagon':
+        ctx.beginPath();
+        const hexSize = size / 2;
+        for (let i = 0; i < 6; i++) {
+          const angle = (i * Math.PI) / 3;
+          const x = centerX + hexSize * Math.cos(angle);
+          const y = centerY + hexSize * Math.sin(angle);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        if (layer.shapeBorderWidth > 0) ctx.stroke();
+        ctx.fill();
+        break;
+
+      default:
+        // Default to circle
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, size / 2, 0, Math.PI * 2);
+        if (layer.shapeBorderWidth > 0) ctx.stroke();
+        ctx.fill();
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.needsUpdate = true;
+    tex.anisotropy = 8;
+    return tex;
+  }, [
+    isShapeLayer,
+    layer.shapeType,
+    layer.shapeColor,
+    layer.shapeBorderColor,
+    layer.shapeBorderWidth,
+  ]);
+
+  // Compute a base position and orientation based on placement area.
+  const placement = layer.placement || 'front';
+  const offsetX = layer.offsetX || 0;
+  const offsetY = layer.offsetY || 0;
+
+  let basePos = { x: 0, y: 0.04, z: 0.15 }; // front center
+  let rotY = 0;
+
+  if (placement === 'back') {
+    basePos = { x: 0, y: 0.04, z: -0.15 };
+    rotY = Math.PI;
+  } else if (placement === 'leftShoulder') {
+    basePos = { x: -0.22, y: 0.22, z: 0.02 };
+    rotY = Math.PI / 2;
+  } else if (placement === 'rightShoulder') {
+    basePos = { x: 0.22, y: 0.22, z: 0.02 };
+    rotY = -Math.PI / 2;
+  }
+
+  // Apply user offsets in a local way so X moves across the area and Y moves up/down.
+  let posX = basePos.x;
+  let posY = basePos.y + offsetY;
+  let posZ = basePos.z;
+
+  if (placement === 'leftShoulder' || placement === 'rightShoulder') {
+    // For shoulders, move along the seam using Z instead of X.
+    posZ += offsetX;
+  } else {
+    posX += offsetX;
+  }
+
+  const userRotZ = ((layer.rotation || 0) * Math.PI) / 180;
+  const rotation = [0, rotY, userRotZ];
+
   // Text layer rendered as a decal using the generated texture.
   if (isTextLayer) {
     if (!layer.visible || !layer.text || !textTexture) return null;
@@ -88,13 +265,34 @@ const LayerDecal = ({ layer }) => {
     return (
       <Decal
         position={[
-          layer.offsetX || 0,
-          0.04 + (layer.offsetY || 0),
-          0.15,
+          posX,
+          posY,
+          posZ,
         ]}
-        rotation={[0, 0, ((layer.rotation || 0) * Math.PI) / 180]}
+        rotation={rotation}
         scale={layer.size || 0.2}
         map={textTexture}
+        anisotropy={16}
+        depthTest={false}
+        depthWrite={true}
+      />
+    );
+  }
+
+  // Shape layer rendered as a decal using the generated texture.
+  if (isShapeLayer) {
+    if (!layer.visible || !layer.shapeType || !shapeTexture) return null;
+
+    return (
+      <Decal
+        position={[
+          posX,
+          posY,
+          posZ,
+        ]}
+        rotation={rotation}
+        scale={layer.size || 0.15}
+        map={shapeTexture}
         anisotropy={16}
         depthTest={false}
         depthWrite={true}
@@ -119,11 +317,11 @@ const LayerDecal = ({ layer }) => {
   return (
     <Decal
       position={[
-        layer.offsetX || 0,
-        0.04 + (layer.offsetY || 0),
-        0.15,
+        posX,
+        posY,
+        posZ,
       ]}
-      rotation={[0, 0, ((layer.rotation || 0) * Math.PI) / 180]}
+      rotation={rotation}
       scale={layer.size || 0.1}
       map={texture}
       anisotropy={16}

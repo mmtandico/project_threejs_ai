@@ -70,13 +70,35 @@ const ModelLibrary = ({ onSelectPreset }) => {
       );
     }
 
-    const backendDesigns = savedDesigns;
+    const backendDesigns = savedDesigns || [];
     const localDesigns = snap.localDesigns || [];
 
-    // Prefer local designs (created this session); fall back to backend.
-    const designList = localDesigns.length
-      ? localDesigns.map((d) => ({ ...d, _id: d.id }))
-      : backendDesigns;
+    // Merge local and backend designs, prioritizing local (newer) designs
+    // Create a map to avoid duplicates
+    const designMap = new Map();
+
+    // Add backend designs first
+    backendDesigns.forEach((design) => {
+      if (design._id) {
+        designMap.set(design._id, { ...design, _id: design._id });
+      }
+    });
+
+    // Override with local designs (these are newer/updated)
+    localDesigns.forEach((design) => {
+      const id = design.id || design._id;
+      if (id) {
+        designMap.set(id, { ...design, _id: id });
+      }
+    });
+
+    // Convert map to array, sorted by most recent first (local designs typically have higher timestamps)
+    const designList = Array.from(designMap.values()).sort((a, b) => {
+      // If both have timestamps, sort by most recent
+      const aTime = a.id ? parseInt(a.id) : 0;
+      const bTime = b.id ? parseInt(b.id) : 0;
+      return bTime - aTime;
+    });
 
     if (!designList.length) {
       return (
@@ -102,6 +124,7 @@ const ModelLibrary = ({ onSelectPreset }) => {
             layers: design.layers,
             shirtDetails: design.shirtDetails,
             sizeLabel: design.sizeLabel,
+            previewImage: design.previewImage, // Include preview image
           };
 
           return (
@@ -111,8 +134,18 @@ const ModelLibrary = ({ onSelectPreset }) => {
               onClick={() => handleSelect(mappedPreset)}
               className="w-full rounded-xl bg-white/80 hover:bg-white transition-colors shadow-sm border border-white/80 overflow-hidden flex flex-col items-center focus:outline-none"
             >
-              <div className="w-full h-40 bg-slate-900/95 flex items-center justify-center">
-                <MiniShirtPreview preset={mappedPreset} />
+              <div className="w-full h-40 bg-slate-900/95 flex items-center justify-center overflow-hidden">
+                {mappedPreset.previewImage ? (
+                  // Use saved preview image if available
+                  <img
+                    src={mappedPreset.previewImage}
+                    alt={mappedPreset.name}
+                    className="w-full h-full object-contain"
+                  />
+                ) : (
+                  // Fall back to live preview
+                  <MiniShirtPreview preset={mappedPreset} />
+                )}
               </div>
               <div className="w-full px-2 py-1.5 flex flex-col items-start gap-0.5">
                 <span className="text-[10px] font-semibold text-gray-800 truncate w-full">

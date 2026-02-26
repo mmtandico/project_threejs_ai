@@ -41,10 +41,16 @@ const LayersManager = ({ onSelectLayer }) => {
     setDragOverIndex(null);
   };
 
-  const handleAddLayer = () => {
+  const handleAddLayer = (layerType = 'logo') => {
+    const layerNames = {
+      text: `Text layer ${state.layers.length + 1}`,
+      logo: `Image layer ${state.layers.length + 1}`,
+      shape: `Shape layer ${state.layers.length + 1}`,
+    };
+
     const newLayer = {
       id: `layer-${Date.now()}`,
-      name: `Text layer ${state.layers.length + 1}`,
+      name: layerNames[layerType] || `Layer ${state.layers.length + 1}`,
       // Start empty so it doesn't override the live shirt until the user adds content.
       image: '',
       visible: true,
@@ -52,13 +58,19 @@ const LayersManager = ({ onSelectLayer }) => {
       offsetX: 0,
       offsetY: 0,
       rotation: 0,
-      type: 'text', // text-only layer; content stored in layer.text
+      type: layerType,
       text: '',
       textColor: '#ffffff',
       fontWeight: 'normal',
       fontStyle: 'normal',
       fontFamily: 'sans-serif',
       outlineEnabled: false,
+      placement: 'front',
+      // Shape properties
+      shapeType: layerType === 'shape' ? 'circle' : undefined,
+      shapeColor: layerType === 'shape' ? '#ff0000' : undefined,
+      shapeBorderColor: layerType === 'shape' ? 'transparent' : undefined,
+      shapeBorderWidth: layerType === 'shape' ? 0 : undefined,
     };
     state.layers = [...state.layers, newLayer];
   };
@@ -93,13 +105,32 @@ const LayersManager = ({ onSelectLayer }) => {
             Layers
           </button>
         </div>
-        <button
-          type="button"
-          onClick={handleAddLayer}
-          className="px-2 py-1 rounded-md bg-sky-500/20 text-sky-300 text-[10px] font-semibold hover:bg-sky-500/30 border border-sky-500/50"
-        >
-          + Add
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => handleAddLayer('logo')}
+            className="px-2 py-1 rounded-md bg-sky-500/20 text-sky-300 text-[10px] font-semibold hover:bg-sky-500/30 border border-sky-500/50"
+            title="Add image layer"
+          >
+            + Image
+          </button>
+          <button
+            type="button"
+            onClick={() => handleAddLayer('text')}
+            className="px-2 py-1 rounded-md bg-purple-500/20 text-purple-300 text-[10px] font-semibold hover:bg-purple-500/30 border border-purple-500/50"
+            title="Add text layer"
+          >
+            + Text
+          </button>
+          <button
+            type="button"
+            onClick={() => handleAddLayer('shape')}
+            className="px-2 py-1 rounded-md bg-emerald-500/20 text-emerald-300 text-[10px] font-semibold hover:bg-emerald-500/30 border border-emerald-500/50"
+            title="Add shape layer"
+          >
+            + Shape
+          </button>
+        </div>
       </div>
 
       <div className="space-y-1 max-h-64 overflow-y-auto custom-scrollbar">
@@ -130,12 +161,21 @@ const LayersManager = ({ onSelectLayer }) => {
             <div className="w-8 h-8 rounded border border-slate-300 overflow-hidden flex-shrink-0 flex items-center justify-center bg-white/60">
               {layer.type === 'text' ? (
                 <span className="text-[10px] font-bold text-slate-700">T</span>
-              ) : (
+              ) : layer.type === 'shape' ? (
+                <div
+                  className="w-full h-full flex items-center justify-center"
+                  style={{ backgroundColor: layer.shapeColor || '#ff0000' }}
+                >
+                  <span className="text-[8px] text-white">●</span>
+                </div>
+              ) : layer.image ? (
                 <img
                   src={layer.image}
                   alt={layer.name}
                   className="w-full h-full object-cover"
                 />
+              ) : (
+                <span className="text-[10px] text-slate-500">IMG</span>
               )}
             </div>
 
