@@ -5,7 +5,7 @@ import state from '../store';
 import { download, swatch, fileIcon, gear } from '../assets';
 import { downloadCanvasToImage, reader } from '../config/helpers';
 import { EditorTabs, FilterTabs, DecalTypes } from '../config/constants';
-import { ColorPicker, CustomButton, FilePicker, Tab, LogoSizePicker, ModelLibrary, LayersManager } from '../components';
+import { ColorPicker, CustomButton, FilePicker, Tab, LogoSizePicker, ModelLibrary, LayersManager, MiniShirtPreview } from '../components';
 
 const Customizer = () => {
   const snap = useSnapshot(state);
@@ -19,6 +19,9 @@ const Customizer = () => {
     stylishShirt: false,
   });
   const [selectedLayer, setSelectedLayer] = useState(null);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [projectName, setProjectName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   // Auto-select first layer on mount
   useEffect(() => {
@@ -126,7 +129,7 @@ const Customizer = () => {
   const applyPreset = (preset) => {
     if (!preset) return;
 
-    // Update global customization state
+    // Update global customization state (color / logos / textures)
     state.color = preset.color || state.color;
     state.logoDecal = preset.logoDecal || state.logoDecal;
     state.fullDecal = preset.fullDecal || state.fullDecal;
@@ -137,6 +140,18 @@ const Customizer = () => {
       state.logoSize = preset.logoSize;
     }
 
+    // Restore full layer stack if present (from "My" saved designs).
+    if (Array.isArray(preset.layers) && preset.layers.length > 0) {
+      // Shallow clone so edits don't mutate the original preset object.
+      state.layers = preset.layers.map((l) => ({ ...l }));
+      setSelectedLayer(state.layers[0]);
+    }
+
+    // Restore sewing measurements if present.
+    if (preset.shirtDetails) {
+      state.shirtDetails = { ...preset.shirtDetails };
+    }
+
     // Keep the filter tab UI in sync with the underlying state
     setActiveFilterTab({
       logoShirt: state.isLogoTexture,
@@ -144,10 +159,21 @@ const Customizer = () => {
     });
   }
 
-  const handleSaveDesign = async () => {
+  const computeSizeLabel = () => {
+    const details = state.shirtDetails || {};
+    const chest = parseFloat(details.chestCircumference);
+    if (!chest || Number.isNaN(chest)) return 'N/A';
+    if (chest < 90) return 'Small';
+    if (chest < 100) return 'Medium';
+    if (chest < 110) return 'Large';
+    return 'Extra Large';
+  };
+
+  const handleSaveDesign = async (name) => {
     try {
+      const sizeLabel = computeSizeLabel();
       const payload = {
-        name: 'Saved design',
+        name: name || 'Saved design',
         description: 'Saved from XillaFit Studio',
         prompt: snap.prompt || '',
         color: state.color,
@@ -155,6 +181,10 @@ const Customizer = () => {
         isFullTexture: state.isFullTexture,
         logoUrl: state.logoDecal || '',
         textureUrl: state.fullDecal || '',
+        sizeLabel,
+        shirtDetails: state.shirtDetails || {},
+        // Persist full layer stack so saved designs can be re‑edited later.
+        layers: state.layers || [],
         userId: null,
       };
 
@@ -163,7 +193,24 @@ const Customizer = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      // You could add a toast here later
+
+      // Also store a local copy so it appears immediately in Library → "My".
+      const localDesign = {
+        id: Date.now().toString(),
+        name: payload.name,
+        color: payload.color,
+        logoUrl: payload.logoUrl,
+        textureUrl: payload.textureUrl,
+        isLogoTexture: payload.isLogoTexture,
+        isFullTexture: payload.isFullTexture,
+        layers: payload.layers,
+        shirtDetails: payload.shirtDetails,
+        sizeLabel: payload.sizeLabel,
+      };
+      state.localDesigns = [localDesign, ...(state.localDesigns || [])];
+
+      // Notify the app that designs have changed so the "My" tab can refresh.
+      state.designsVersion = (state.designsVersion || 0) + 1;
     } catch (error) {
       console.error('Failed to save design', error);
     }
@@ -249,7 +296,10 @@ const Customizer = () => {
           </button>
           <button
             type="button"
-            onClick={handleSaveDesign}
+            onClick={() => {
+              setProjectName('');
+              setShowSaveModal(true);
+            }}
             className="hidden sm:inline-flex items-center gap-1 rounded-full border border-emerald-500/70 bg-emerald-500/20 px-3 py-1.5 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-500/30"
           >
             <span>Save design</span>
@@ -338,7 +388,7 @@ const Customizer = () => {
         <div className="relative flex-1 min-w-[480px]" />
 
         {/* Controls panel */}
-        <aside className="w-[260px] max-w-xs shrink-0 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl p-3 sm:p-4 flex flex-col gap-3 pointer-events-auto">
+        <aside className="w-[260px] max-w-xs shrink-0 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl p-3 sm:p-4 flex flex-col gap-3 pointer-events-auto max-h-[80vh] overflow-y-auto custom-scrollbar">
           <h2 className="text-sm font-semibold text-slate-100 tracking-wide uppercase">
             Design controls
           </h2>
@@ -670,9 +720,229 @@ const Customizer = () => {
                 </span>
               </div>
             </div>
+
+            {/* Shirt measurement notes – for sewing / production */}
+            <div className="mt-3 space-y-1 border-t border-slate-800 pt-2">
+              <p className="text-[11px] font-semibold tracking-wide uppercase text-slate-300">
+                Shirt details
+              </p>
+              <p className="text-[10px] text-slate-500 mb-1">
+                Optional measurements and notes commonly used in sewing / production.
+              </p>
+
+              {[
+                { key: 'shoulderWidth', label: 'Shoulder width (cm)' },
+                { key: 'neckCircumference', label: 'Neck circumference (cm)' },
+                { key: 'chestCircumference', label: 'Chest / bust (cm)' },
+                { key: 'waistCircumference', label: 'Waist (cm)' },
+                { key: 'hipToShoulder', label: 'Hip to shoulder (cm)' },
+                { key: 'shirtLength', label: 'Shirt length (cm)' },
+                { key: 'sleeveLength', label: 'Sleeve length (cm)' },
+              ].map((field) => {
+                const rawValue = snap.shirtDetails?.[field.key];
+                const numericValue =
+                  rawValue === '' || rawValue === undefined || rawValue === null
+                    ? ''
+                    : Number(rawValue);
+
+                const updateValue = (next) => {
+                  state.shirtDetails = {
+                    ...(state.shirtDetails || {}),
+                    [field.key]: next,
+                  };
+                };
+
+                const step = 0.5;
+
+                return (
+                  <div key={field.key} className="flex items-center justify-between gap-2 text-[10px]">
+                    <span className="text-slate-300">{field.label}</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const current = parseFloat(numericValue || 0);
+                          const next = (current - step).toFixed(1);
+                          updateValue(next);
+                        }}
+                        className="w-5 h-5 flex items-center justify-center rounded-full border border-slate-700 bg-slate-900/70 text-slate-200 hover:bg-slate-800"
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        step={step}
+                        value={numericValue}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          updateValue(val);
+                        }}
+                        className="w-16 rounded-md border border-slate-700 bg-slate-900/60 px-2 py-1 text-[10px] text-slate-100 text-right focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        placeholder="-"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const current = parseFloat(numericValue || 0);
+                          const next = (current + step).toFixed(1);
+                          updateValue(next);
+                        }}
+                        className="w-5 h-5 flex items-center justify-center rounded-full border border-slate-700 bg-slate-900/70 text-slate-200 hover:bg-slate-800"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </aside>
       </div>
+
+      {/* Save design confirmation modal */}
+      {showSaveModal && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/60 pointer-events-auto">
+          <div className="w-full max-w-xl rounded-2xl bg-slate-950 border border-slate-700 shadow-2xl p-5 space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-100 mb-1">
+                  Save design to library
+                </h2>
+                <p className="text-[11px] text-slate-400">
+                  Confirm the details below. This design will appear in the <span className="font-semibold">“My”</span> section of the library.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isSaving && setShowSaveModal(false)}
+                className="text-slate-400 hover:text-slate-100 text-sm px-2"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Project name */}
+            <div className="space-y-1">
+              <label className="text-[11px] text-slate-300">
+                Project name
+              </label>
+              <input
+                type="text"
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                className="w-full rounded-md border border-slate-700 bg-slate-900/70 px-3 py-1.5 text-[11px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                placeholder="e.g. Team Jersey v1"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Live shirt preview */}
+              <div className="space-y-2">
+                <p className="text-[11px] font-semibold text-slate-300">
+                  Preview
+                </p>
+                <div className="w-full h-40 rounded-xl bg-slate-900 border border-slate-700 overflow-hidden">
+                  <MiniShirtPreview
+                    preset={{
+                      id: 'live-preview',
+                      name: projectName || 'Untitled project',
+                      color: state.color,
+                      logoDecal: state.logoDecal,
+                      fullDecal: state.fullDecal,
+                      isLogoTexture: state.isLogoTexture,
+                      isFullTexture: state.isFullTexture,
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Summary */}
+              <div className="space-y-2 text-[11px] text-slate-200">
+                <p className="font-semibold text-slate-300">Summary</p>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span>Base color</span>
+                    <span className="inline-flex items-center gap-2">
+                      <span
+                        className="inline-flex w-3 h-3 rounded-full border border-slate-600"
+                        style={{ backgroundColor: snap.color }}
+                      />
+                      <span className="font-mono text-slate-300">{snap.color}</span>
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Size (auto)</span>
+                    <span className="font-semibold text-emerald-300">
+                      {computeSizeLabel()}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-2 space-y-1">
+                  <p className="text-[10px] text-slate-400">
+                    Key measurements (if provided):
+                  </p>
+                  <ul className="text-[10px] text-slate-300 space-y-0.5">
+                    <li>
+                      Shoulder width:{' '}
+                      <span className="font-mono">
+                        {snap.shirtDetails?.shoulderWidth || '–'}
+                      </span>
+                    </li>
+                    <li>
+                      Chest / bust:{' '}
+                      <span className="font-mono">
+                        {snap.shirtDetails?.chestCircumference || '–'}
+                      </span>
+                    </li>
+                    <li>
+                      Waist:{' '}
+                      <span className="font-mono">
+                        {snap.shirtDetails?.waistCircumference || '–'}
+                      </span>
+                    </li>
+                    <li>
+                      Shirt length:{' '}
+                      <span className="font-mono">
+                        {snap.shirtDetails?.shirtLength || '–'}
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => !isSaving && setShowSaveModal(false)}
+                className="px-3 py-1.5 rounded-full border border-slate-600 text-[11px] text-slate-200 hover:bg-slate-800"
+                disabled={isSaving}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (isSaving) return;
+                  setIsSaving(true);
+                  try {
+                    await handleSaveDesign(projectName || 'Saved design');
+                    setShowSaveModal(false);
+                  } finally {
+                    setIsSaving(false);
+                  }
+                }}
+                className="px-4 py-1.5 rounded-full border border-emerald-500 bg-emerald-500/20 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-60 disabled:cursor-not-allowed"
+                disabled={isSaving}
+              >
+                {isSaving ? 'Saving…' : 'Confirm & save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

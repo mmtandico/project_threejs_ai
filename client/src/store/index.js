@@ -36,8 +36,22 @@ const state = proxy({
       outlineEnabled: false,
     },
   ],
+  // Optional shirt measurement notes (for sewing / production)
+  shirtDetails: {
+    shoulderWidth: '',
+    neckCircumference: '',
+    chestCircumference: '',
+    waistCircumference: '',
+    hipToShoulder: '',
+    shirtLength: '',
+    sleeveLength: '',
+  },
+  // Bump this whenever designs are saved so the ModelLibrary "My" tab can refresh.
+  designsVersion: 0,
   // User-uploaded images that can be reused in designs
   uploadedImages: [], // { id, src, name }
+  // Locally saved designs for the current session (shown under Library → "My")
+  localDesigns: [], // { id, name, color, logoUrl, textureUrl, isLogoTexture, isFullTexture, layers, shirtDetails, sizeLabel }
 });
 
 export default state;

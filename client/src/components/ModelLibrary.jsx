@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
+import { useSnapshot } from 'valtio';
 
 import { PresetDesigns } from '../config/constants';
 import MiniShirtPreview from './MiniShirtPreview';
+import state from '../store';
 
 const ModelLibrary = ({ onSelectPreset }) => {
   const [activeTab, setActiveTab] = useState('library'); // 'library' | 'my'
   const [savedDesigns, setSavedDesigns] = useState([]);
   const [loading, setLoading] = useState(false);
+  const snap = useSnapshot(state);
 
   const handleSelect = (preset) => {
     if (typeof onSelectPreset === 'function') {
@@ -28,10 +31,10 @@ const ModelLibrary = ({ onSelectPreset }) => {
   };
 
   useEffect(() => {
-    if (activeTab === 'my' && savedDesigns.length === 0) {
+    if (activeTab === 'my') {
       fetchSavedDesigns();
     }
-  }, [activeTab]);
+  }, [activeTab, snap.designsVersion]);
 
   const renderGrid = () => {
     if (activeTab === 'library') {
@@ -42,9 +45,9 @@ const ModelLibrary = ({ onSelectPreset }) => {
               key={preset.id}
               type="button"
               onClick={() => handleSelect(preset)}
-              className="w-full rounded-xl bg-white/80 hover:bg-white transition-all shadow-sm hover:shadow-md border border-white/80 overflow-hidden flex flex-col items-center focus:outline-none"
+              className="w-full rounded-xl bg-white/80 hover:bg-white transition-colors shadow-sm border border-white/80 overflow-hidden flex flex-col items-center focus:outline-none"
             >
-              <div className="w-full aspect-square bg-slate-900/95 flex items-center justify-center">
+              <div className="w-full h-40 bg-slate-900/95 flex items-center justify-center">
                 <MiniShirtPreview preset={preset} />
               </div>
               <div className="w-full px-2 py-1.5 flex flex-col items-start gap-0.5">
@@ -59,7 +62,7 @@ const ModelLibrary = ({ onSelectPreset }) => {
       );
     }
 
-    if (loading) {
+    if (loading && !snap.localDesigns?.length) {
       return (
         <div className="flex items-center justify-center h-full text-[11px] text-gray-500">
           Loading your designs...
@@ -67,7 +70,15 @@ const ModelLibrary = ({ onSelectPreset }) => {
       );
     }
 
-    if (!savedDesigns.length) {
+    const backendDesigns = savedDesigns;
+    const localDesigns = snap.localDesigns || [];
+
+    // Prefer local designs (created this session); fall back to backend.
+    const designList = localDesigns.length
+      ? localDesigns.map((d) => ({ ...d, _id: d.id }))
+      : backendDesigns;
+
+    if (!designList.length) {
       return (
         <div className="flex flex-col items-center justify-center h-full text-center px-4 text-[11px] text-gray-500 gap-1.5">
           <span className="font-semibold text-gray-700">No saved designs yet</span>
@@ -78,7 +89,7 @@ const ModelLibrary = ({ onSelectPreset }) => {
 
     return (
       <div className="grid grid-cols-2 gap-3">
-        {savedDesigns.map((design) => {
+        {designList.map((design) => {
           const mappedPreset = {
             id: design._id,
             name: design.name || 'Saved design',
@@ -87,6 +98,10 @@ const ModelLibrary = ({ onSelectPreset }) => {
             fullDecal: design.textureUrl,
             isLogoTexture: design.isLogoTexture,
             isFullTexture: design.isFullTexture,
+            // Extra data so saved designs can be fully re‑editable
+            layers: design.layers,
+            shirtDetails: design.shirtDetails,
+            sizeLabel: design.sizeLabel,
           };
 
           return (
@@ -94,9 +109,9 @@ const ModelLibrary = ({ onSelectPreset }) => {
               key={design._id}
               type="button"
               onClick={() => handleSelect(mappedPreset)}
-              className="w-full rounded-xl bg-white/80 hover:bg-white transition-all shadow-sm hover:shadow-md border border-white/80 overflow-hidden flex flex-col items-center focus:outline-none"
+              className="w-full rounded-xl bg-white/80 hover:bg-white transition-colors shadow-sm border border-white/80 overflow-hidden flex flex-col items-center focus:outline-none"
             >
-              <div className="w-full aspect-square bg-slate-900/95 flex items-center justify-center">
+              <div className="w-full h-40 bg-slate-900/95 flex items-center justify-center">
                 <MiniShirtPreview preset={mappedPreset} />
               </div>
               <div className="w-full px-2 py-1.5 flex flex-col items-start gap-0.5">
