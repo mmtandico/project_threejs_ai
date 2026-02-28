@@ -1,0 +1,15 @@
+[build]
+  # Base directory where package.json is located
+  base = "client"
+
+  # Build command to create production build
+  command = "npm run build"
+
+  # Directory to publish (Vite outputs to 'dist' by default)
+  publish = "dist"
+
+# Redirect all routes to index.html for SPA routing
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
