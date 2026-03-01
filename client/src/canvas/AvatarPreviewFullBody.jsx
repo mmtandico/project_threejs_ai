@@ -5,11 +5,7 @@ import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 
 import state from '../store';
-
-// Import FBX assets so Vite bundles and serves them correctly
-// Use the newer MaleAvatar1.fbx file for the male avatar
-import maleAvatarUrl from './MaleAvatar1.fbx';
-import femaleAvatarUrl from './FemaleAvatar.fbx';
+import { getStorageUrl } from '../config/supabase';
 
 /**
  * Full‑body 3D Avatar preview.
@@ -20,6 +16,10 @@ const AvatarPreviewFullBody = () => {
     const snap = useSnapshot(state);
     const groupRef = useRef();
     const fallbackBodyRef = useRef();
+
+    // Get avatar model URLs from Supabase Storage
+    const maleAvatarUrl = useMemo(() => getStorageUrl('MaleAvatar1.fbx'), []);
+    const femaleAvatarUrl = useMemo(() => getStorageUrl('FemaleAvatar.fbx'), []);
 
     // Load both avatars so we can easily swap later
     const maleScene = useLoader(FBXLoader, maleAvatarUrl);

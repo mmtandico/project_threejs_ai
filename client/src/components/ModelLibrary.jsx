@@ -79,8 +79,9 @@ const ModelLibrary = ({ onSelectPreset }) => {
 
     // Add backend designs first
     backendDesigns.forEach((design) => {
-      if (design._id) {
-        designMap.set(design._id, { ...design, _id: design._id });
+      const id = design.id || design._id; // Support both id (Supabase) and _id (legacy MongoDB)
+      if (id) {
+        designMap.set(id, { ...design, id: id });
       }
     });
 
@@ -88,7 +89,7 @@ const ModelLibrary = ({ onSelectPreset }) => {
     localDesigns.forEach((design) => {
       const id = design.id || design._id;
       if (id) {
-        designMap.set(id, { ...design, _id: id });
+        designMap.set(id, { ...design, id: id });
       }
     });
 
@@ -112,8 +113,9 @@ const ModelLibrary = ({ onSelectPreset }) => {
     return (
       <div className="grid grid-cols-2 gap-3">
         {designList.map((design) => {
+          const designId = design.id || design._id; // Support both id (Supabase) and _id (legacy MongoDB)
           const mappedPreset = {
-            id: design._id,
+            id: designId,
             name: design.name || 'Saved design',
             color: design.color,
             logoDecal: design.logoUrl,
@@ -129,7 +131,7 @@ const ModelLibrary = ({ onSelectPreset }) => {
 
           return (
             <button
-              key={design._id}
+              key={designId}
               type="button"
               onClick={() => handleSelect(mappedPreset)}
               className="w-full rounded-xl bg-white/80 hover:bg-white transition-colors shadow-sm border border-white/80 overflow-hidden flex flex-col items-center focus:outline-none"

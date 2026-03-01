@@ -6,6 +6,7 @@ import { Decal, useGLTF, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 
 import state from '../store';
+import { getStorageUrl } from '../config/supabase';
 
 // Component to render a single layer
 const LayerDecal = ({ layer }) => {
@@ -343,7 +344,9 @@ const Shirt = ({
   disableLayers = false,
 }) => {
   const snap = useSnapshot(state);
-  const { nodes, materials } = useGLTF('/shirt_baked.glb');
+  // Load shirt model from Supabase Storage
+  const shirtModelUrl = useMemo(() => getStorageUrl('shirt_baked.glb'), []);
+  const { nodes, materials } = useGLTF(shirtModelUrl);
   const meshRef = useRef();
 
   const appliedColor = colorOverride || snap.color;

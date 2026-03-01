@@ -264,7 +264,7 @@ const Customizer = () => {
 
       // Also store a local copy so it appears immediately in Library → "My".
       const localDesign = {
-        id: savedDesign?._id || Date.now().toString(),
+        id: savedDesign?.id || savedDesign?._id || Date.now().toString(), // Support both id (Supabase) and _id (legacy MongoDB)
         name: payload.name,
         color: payload.color,
         logoUrl: payload.logoUrl,

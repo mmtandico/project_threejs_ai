@@ -1,4 +1,4 @@
-import { Suspense } from 'react';
+import { Suspense, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber'
 import { Environment, OrbitControls } from '@react-three/drei';
 import { useSnapshot } from 'valtio';
@@ -7,16 +7,21 @@ import Backdrop from './Backdrop';
 import CameraRig from './CameraRig';
 import StudioShirt from './StudioShirt';
 import AvatarModel from './AvatarModel';
-import maleAvatar1Url from './MaleAvatar1.fbx';
-import femaleAvatarUrl from './FemaleAvatar.fbx';
 import state from '../store';
+import { getStorageUrl } from '../config/supabase';
 
 const CanvasModel = () => {
   const snap = useSnapshot(state);
 
+  // Get avatar model URLs from Supabase Storage
+  const maleAvatarUrl = useMemo(() => getStorageUrl('MaleAvatar1.fbx'), []);
+  const femaleAvatarUrl = useMemo(() => getStorageUrl('FemaleAvatar.fbx'), []);
+
   // Choose which avatar model to show based on the current gender toggle.
-  const avatarModelPath =
-    snap.avatarGender === 'female' ? femaleAvatarUrl : maleAvatar1Url;
+  const avatarModelPath = useMemo(() =>
+    snap.avatarGender === 'female' ? femaleAvatarUrl : maleAvatarUrl,
+    [snap.avatarGender, maleAvatarUrl, femaleAvatarUrl]
+  );
 
   // Use a different camera setup for avatar vs shirt.
   // Reset to a simple, stable avatar framing: full body, centered,
