@@ -1,2 +1,37 @@
+# Dependencies
 node_modules
+package-lock.json
+
+# Environment variables
 .env
+.env.local
+.env.*.local
+
+# Build outputs
+dist
+build
+*.log
+
+# 3D Model files (now stored in Supabase Storage)
+*.fbx
+*.glb
+*.gltf
+*.obj
+*.dae
+*.3ds
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+.cache
