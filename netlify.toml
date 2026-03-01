@@ -1,12 +1,12 @@
 [build]
-  # Base directory where package.json is located
-  base = "client"
-
-  # Build command to create production build
-  command = "npm run build"
-
-  # Directory to publish (Vite outputs to 'dist' by default)
-  publish = "dist"
+  # Base directory - set to root so we can use absolute paths
+  base = "."
+  
+  # Build command - change to client directory and run build
+  command = "cd client && npm run build"
+  
+  # Directory to publish (absolute path from repo root)
+  publish = "client/dist"
 
 # Redirect all routes to index.html for SPA routing
 [[redirects]]
